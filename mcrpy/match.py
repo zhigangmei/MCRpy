@@ -48,6 +48,20 @@ from mcrpy.src.descriptor_factory import descriptor_choices
 def main(args: argparse.Namespace):
     """Main function for matching script. This wraps some i/o around the match() function in order to make it usable
     via a command line interface and via a GUI. When mcrpy is used as a Python module directly, this main function is not called."""
+    
+    # Initialize GPU configuration if requested
+    if getattr(args, 'auto_gpu_config', True):
+        from mcrpy.src.gpu_manager import auto_configure_gpus
+        auto_configure_gpus()
+    elif hasattr(args, 'gpu_ids') and args.gpu_ids is not None:
+        from mcrpy.src.gpu_manager import setup_gpus
+        setup_gpus(
+            gpu_ids=args.gpu_ids,
+            memory_growth=getattr(args, 'memory_growth', True),
+            memory_limit=getattr(args, 'memory_limit', None),
+            enable_mixed_precision=getattr(args, 'enable_mixed_precision', False)
+        )
+    
     initial_microstructure, add_dimension = extract_args(args)
     settings = MatchingSettings(**vars(args))
 
@@ -219,5 +233,14 @@ if __name__ == '__main__':
     parser.add_argument('--profile', dest='profile', action='store_true')
     parser.set_defaults(profile=False)
     parser.add_argument('--batch_size', type=float, help='Batch size for greedy optimization in 3D, ie how many slices are considered per step', default=1)
+    
+    # Multi-GPU support arguments
+    parser.add_argument('--gpu_ids', nargs='+', type=int, help='GPU IDs to use (e.g. --gpu_ids 0 1 2). If not specified, uses all available GPUs.', default=None)
+    parser.add_argument('--memory_growth', action='store_true', help='Enable GPU memory growth (recommended)', default=True)
+    parser.add_argument('--no_memory_growth', dest='memory_growth', action='store_false', help='Disable GPU memory growth')
+    parser.add_argument('--memory_limit', type=int, help='Memory limit per GPU in MB', default=None)
+    parser.add_argument('--enable_mixed_precision', action='store_true', help='Enable mixed precision training (float16)', default=False)
+    parser.add_argument('--use_distributed_loss', action='store_true', help='Use distributed loss computation for multi-GPU', default=False)
+    parser.add_argument('--auto_gpu_config', action='store_true', help='Automatically configure GPUs with sensible defaults', default=True)
     args = parser.parse_args()
     main(args)

@@ -69,6 +69,12 @@ class DMCR:
             batch_size: int = 1,
             symmetry: Symmetry = None,
             initial_microstructure: Microstructure = None,
+            # Multi-GPU support parameters
+            gpu_ids: List[int] = None,
+            memory_growth: bool = True,
+            memory_limit: int = None,
+            enable_mixed_precision: bool = False,
+            use_distributed_loss: bool = False,
             **kwargs):
         """Initializer for differentiable microstructure characterisation and reconstruction (DMCR).
         DMCR formulates microstructure reconstruction as a differentiable optimization problem.
@@ -121,6 +127,17 @@ class DMCR:
         self.batch_size = batch_size
         self.initial_microstructure = initial_microstructure
         self.minimal_resolution = minimal_resolution if minimal_resolution is not None else limit_to
+        
+        # Multi-GPU configuration
+        self.gpu_ids = gpu_ids
+        self.memory_growth = memory_growth
+        self.memory_limit = memory_limit
+        self.enable_mixed_precision = enable_mixed_precision
+        self.use_distributed_loss = use_distributed_loss
+        
+        # Initialize GPU configuration
+        self._setup_gpu_strategy()
+        
         tf.keras.backend.set_floatx("float64")
         self.kwargs = kwargs
         self.convergence_data = {
@@ -170,6 +187,23 @@ class DMCR:
         self.desired_shape_extended = None
         self.loss = None
         self.anisotropic = None
+
+    def _setup_gpu_strategy(self):
+        """Set up GPU configuration and distribution strategy."""
+        from mcrpy.src.gpu_manager import setup_gpus, print_gpu_status
+        
+        try:
+            self.strategy = setup_gpus(
+                gpu_ids=self.gpu_ids,
+                memory_growth=self.memory_growth,
+                memory_limit=self.memory_limit,
+                enable_mixed_precision=self.enable_mixed_precision
+            )
+            print_gpu_status()
+        except Exception as e:
+            log.warning(f"Failed to setup GPU configuration: {e}")
+            log.info("Falling back to default strategy")
+            self.strategy = tf.distribute.get_strategy()
 
     @log.log_this
     def setup_descriptor(self):
@@ -384,9 +418,18 @@ class DMCR:
                     }
         self.opt = optimizer_factory.create(self.optimizer_type, arguments=opt_kwargs)
 
-        self.opt.set_call_loss(loss_computation.make_call_loss(
+        # Choose appropriate loss computation method
+        if self.use_distributed_loss:
+            from mcrpy.src.loss_computation_distributed import make_call_loss_distributed
+            call_loss_fn = make_call_loss_distributed(
                 self.loss, self.ms, self.is_gradient_based, sparse=self.opt.is_sparse,
-                greedy=self.greedy, batch_size = self.batch_size))
+                greedy=self.greedy, batch_size=self.batch_size)
+        else:
+            call_loss_fn = loss_computation.make_call_loss(
+                self.loss, self.ms, self.is_gradient_based, sparse=self.opt.is_sparse,
+                greedy=self.greedy, batch_size=self.batch_size)
+        
+        self.opt.set_call_loss(call_loss_fn)
 
         # pass vf information extra if needed
         if optimizer_factory.optimizer_classes[self.optimizer_type].is_vf_based:

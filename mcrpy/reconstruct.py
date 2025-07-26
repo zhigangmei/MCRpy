@@ -43,10 +43,22 @@ from mcrpy.src.Microstructure import Microstructure
 from mcrpy.src.descriptor_factory import descriptor_choices
 
 
-def main(args):
-    """Main function for reconstruction script. This wraps some i/o around the reconstruct() function in order to make it usable
-    via a command line interface and via a GUI. When mcrpy is used as a Python module directly, this main function is not called."""
-    # prepare reconstruction
+def main(args: argparse.Namespace):
+    """Main function for reconstruction script."""
+    
+    # Initialize GPU configuration if requested
+    if getattr(args, 'auto_gpu_config', True):
+        from mcrpy.src.gpu_manager import auto_configure_gpus
+        auto_configure_gpus()
+    elif hasattr(args, 'gpu_ids') and args.gpu_ids is not None:
+        from mcrpy.src.gpu_manager import setup_gpus
+        setup_gpus(
+            gpu_ids=args.gpu_ids,
+            memory_growth=getattr(args, 'memory_growth', True),
+            memory_limit=getattr(args, 'memory_limit', None),
+            enable_mixed_precision=getattr(args, 'enable_mixed_precision', False)
+        )
+    
     descriptor_dict, desired_shape, initial_microstructure, settings = prepare_reconstruction(args)
 
     # reconstruct
@@ -232,5 +244,15 @@ if __name__ == '__main__':
     parser.add_argument('--profile', dest='profile', action='store_true')
     parser.set_defaults(profile=False)
     parser.add_argument('--batch_size', type=float, help='Batch size for greedy optimization in 3D, ie how many slices are considered per step', default=1)
+    
+    # Multi-GPU support arguments
+    parser.add_argument('--gpu_ids', nargs='+', type=int, help='GPU IDs to use', default=None)
+    parser.add_argument('--memory_growth', action='store_true', help='Enable GPU memory growth', default=True)
+    parser.add_argument('--no_memory_growth', dest='memory_growth', action='store_false')
+    parser.add_argument('--memory_limit', type=int, help='Memory limit per GPU in MB', default=None)
+    parser.add_argument('--enable_mixed_precision', action='store_true', help='Enable mixed precision', default=False)
+    parser.add_argument('--use_distributed_loss', action='store_true', help='Use distributed loss computation', default=False)
+    parser.add_argument('--auto_gpu_config', action='store_true', help='Auto configure GPUs', default=True)
+    
     args = parser.parse_args()
     main(args)

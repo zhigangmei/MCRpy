@@ -161,6 +161,13 @@ def call_main():
     group_rec_com.add_argument('--logging_level', type=int, help='Logging level.', default=logging.INFO, gooey_options=GOOEY_OPTIONS)
     group_rec_com.add_argument('--logfile_date', dest='logfile_date', type=str2bool, choices=[True, False], gooey_options=GOOEY_OPTIONS)
     group_rec_com.set_defaults(logfile_date=False)
+    
+    # GPU options group for reconstruction
+    group_rec_gpu = parser_rec.add_argument_group("GPU options", "", gooey_options=GOOEY_OPTIONS)
+    group_rec_gpu.add_argument('--auto_gpu_config', type=str2bool, help='Automatically configure GPUs', default=True, choices=[True, False], gooey_options=GOOEY_OPTIONS)
+    group_rec_gpu.add_argument('--memory_growth', type=str2bool, help='Enable GPU memory growth', default=True, choices=[True, False], gooey_options=GOOEY_OPTIONS)
+    group_rec_gpu.add_argument('--enable_mixed_precision', type=str2bool, help='Enable mixed precision', default=False, choices=[True, False], gooey_options=GOOEY_OPTIONS)
+    group_rec_gpu.add_argument('--use_distributed_loss', type=str2bool, help='Use distributed loss computation', default=False, choices=[True, False], gooey_options=GOOEY_OPTIONS)
 
     parser_mat = subparsers.add_parser('Match')
     parser_mat.set_defaults(func=main_match)
